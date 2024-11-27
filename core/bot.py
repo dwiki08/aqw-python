@@ -398,6 +398,13 @@ class Bot:
                 dropItems = data.get('dropItems')
                 dropItemsName = [item["sName"] for item in dropItems.values() if "sName" in item]
                 print(Fore.YELLOW + f"Wheel: {dropItemsName}" + Fore.WHITE)
+            elif cmd == "acceptQuest":
+                if data["bSuccess"] == 1:
+                    quest_id = data["QuestID"]
+                    loaded_quest_ids = [loaded_quest["QuestID"] for loaded_quest in self.loaded_quest_datas]
+                    if not str(quest_id) in str(loaded_quest_ids):
+                        self.write_message(f"%xt%zm%getQuests%{self.areaId}%{quest_id}%")
+                        self.doSleep(500)
         elif self.is_valid_xml(msg):
             if ("<cross-domain-policy><allow-access-from domain='*'" in msg):
                 self.write_message(f"<msg t='sys'><body action='login' r='0'><login z='zone_master'><nick><![CDATA[SPIDER#0001~{self.player.USER}~3.0098]]></nick><pword><![CDATA[{self.player.TOKEN}]]></pword></login></body></msg>")
@@ -544,10 +551,6 @@ class Bot:
         self.write_message(packet)
     
     def accept_quest(self, quest_id: int):
-        loaded_quest_ids = [loaded_quest["QuestID"] for loaded_quest in self.loaded_quest_datas]
-        if not str(quest_id) in str(loaded_quest_ids):
-            self.write_message(f"%xt%zm%getQuests%{self.areaId}%{quest_id}%")
-            self.doSleep(500)
         self.write_message(f"%xt%zm%acceptQuest%{self.areaId}%{quest_id}%")
         self.doSleep(500)
         
@@ -643,7 +646,7 @@ class Bot:
     def ensure_leave_from_combat(self, sleep_ms: int = 2000):
         if self.player.IS_IN_COMBAT:
             self.jump_cell(self.player.CELL, self.player.PAD)
-            time.sleep(sleep/1000)
+            time.sleep(sleep_ms/1000)
         
     def jump_cell(self, cell, pad):
         msg = f"%xt%zm%moveToCell%{self.areaId}%{cell}%{pad}%"
@@ -653,6 +656,37 @@ class Bot:
 
     def walk_to(self, x, y, speed = 8):
         self.write_message(f"%xt%zm%mv%{self.areaId}%{x}%{y}%{speed}%")
+    
+    def find_best_cell(self, monster_name):
+        filtered_monsters = [mon for mon in self.monsters if mon.mon_name.lower() == monster_name.lower()]
+
+        if not filtered_monsters:
+            return None
+
+        cell_counts = {}
+        for mon in filtered_monsters:
+            cell_counts[mon.frame] = cell_counts.get(mon.frame, 0) + 1
+
+        best_cell = max(cell_counts, key=cell_counts.get)
+        return best_cell
+
+    def can_turn_in_quest(self, questId: int) -> bool:
+        for loaded_quest in self.loaded_quest_datas:
+            if str(loaded_quest.get("QuestID", 0))  == str(questId):
+                return self._check_req_inventory(loaded_quest["turnin"])
+
+    def _check_req_inventory(self, quest_data) -> bool:
+        for req_item in quest_data:
+            required_item_id = req_item["ItemID"]
+            required_qty = req_item["iQty"]
+
+            item = self.player.get_item_inventory_by_id(required_item_id) or \
+                self.player.get_item_temp_inventory_by_id(required_item_id)
+
+            if not item or item["iQty"] < required_qty:
+                return False
+
+        return True
 
     def reset_cmds(self):
         self.cmds = []
